@@ -1,0 +1,121 @@
+{
+  "metadata": {
+    "origem": "Parametros Estatisticos Validados no Trabalho 2 - Dataset 3W Petrobras",
+    "descricao": "Media, desvio padrao, mediana (para imputacao de nulos) e limites operacionais por sensor",
+    "versao": "1.0",
+    "limiar_zscore_iminente": 2.0,
+    "limiar_zscore_critico": 3.0
+  },
+  "sensores": {
+    "P-PDG": {
+      "descricao": "Pressao no Permanent Downhole Gauge (Pa)",
+      "aliases": ["P-PDG", "P_PDG"],
+      "media": 26500000.0,
+      "desvio_padrao": 4500000.0,
+      "mediana": 26200000.0,
+      "min": 10000000.0,
+      "max": 45000000.0,
+      "media_escala_reduzida": 350.0,
+      "desvio_escala_reduzida": 85.0
+    },
+    "P-TPT": {
+      "descricao": "Pressao no Temperature and Pressure Transducer (Pa)",
+      "aliases": ["P-TPT", "P-TP", "P_TPT"],
+      "media": 14200000.0,
+      "desvio_padrao": 2800000.0,
+      "mediana": 14000000.0,
+      "min": 2000000.0,
+      "max": 28000000.0,
+      "media_escala_reduzida": 135.0,
+      "desvio_escala_reduzida": 25.0
+    },
+    "T-TPT": {
+      "descricao": "Temperatura no Temperature and Pressure Transducer (C)",
+      "aliases": ["T-TPT", "T-TP", "T_TPT"],
+      "media": 76.5,
+      "desvio_padrao": 12.4,
+      "mediana": 77.0,
+      "min": 20.0,
+      "max": 125.0,
+      "media_escala_reduzida": 76.5,
+      "desvio_escala_reduzida": 12.4
+    },
+    "P-MON-CKP": {
+      "descricao": "Pressao a montante do Choke de Producao (Pa)",
+      "aliases": ["P-MON-CKP", "P-MON-CK", "P_MON_CKP"],
+      "media": 4200000.0,
+      "desvio_padrao": 1150000.0,
+      "mediana": 4100000.0,
+      "min": 500000.0,
+      "max": 12000000.0,
+      "media_escala_reduzida": 28.5,
+      "desvio_escala_reduzida": 12.0
+    },
+    "T-JUS-CKP": {
+      "descricao": "Temperatura a jusante do Choke de Producao (C)",
+      "aliases": ["T-JUS-CKP", "T-JSC", "T_JUS_CKP"],
+      "media": 54.2,
+      "desvio_padrao": 9.8,
+      "mediana": 55.0,
+      "min": 15.0,
+      "max": 95.0,
+      "media_escala_reduzida": 54.2,
+      "desvio_escala_reduzida": 9.8
+    },
+    "P-JUS-CKGL": {
+      "descricao": "Pressao a jusante do Choke de Gas Lift (Pa)",
+      "aliases": ["P-JUS-CKGL", "P_JUS_CKGL"],
+      "media": 11500000.0,
+      "desvio_padrao": 2100000.0,
+      "mediana": 11400000.0,
+      "min": 1000000.0,
+      "max": 22000000.0,
+      "media_escala_reduzida": 115.0,
+      "desvio_escala_reduzida": 21.0
+    },
+    "T-JUS-CKGL": {
+      "descricao": "Temperatura a jusante do Choke de Gas Lift (C)",
+      "aliases": ["T-JUS-CKGL", "T_JUS_CKGL"],
+      "media": 42.0,
+      "desvio_padrao": 7.5,
+      "mediana": 42.0,
+      "min": 5.0,
+      "max": 80.0,
+      "media_escala_reduzida": 42.0,
+      "desvio_escala_reduzida": 7.5
+    },
+    "QGL": {
+      "descricao": "Vazao de Gas Lift (m3/s)",
+      "aliases": ["QGL", "Q-GL"],
+      "media": 0.45,
+      "desvio_padrao": 0.22,
+      "mediana": 0.42,
+      "min": 0.0,
+      "max": 2.5,
+      "media_escala_reduzida": 0.45,
+      "desvio_escala_reduzida": 0.22
+    }
+  },
+  "mapa_classes_3w": {
+    "0": "Operacao Normal",
+    "1": "Aumento Abrupto de BSW (Agua/Sedimentos)",
+    "2": "Fechamento Espurio de DHSV",
+    "3": "Golfada Severa (Severe Slugging)",
+    "4": "Instabilidade de Fluxo",
+    "5": "Perda Rapida de Produtividade",
+    "6": "Restricao Rapida em PCK (Production Choke)",
+    "7": "Incrustacao em PCK (Scaling)",
+    "8": "Hidrato na Linha de Producao",
+    "9": "Hidrato na Linha de Servico",
+    "101": "Transiente/Iminente: Aumento Abrupto de BSW",
+    "102": "Transiente/Iminente: Fechamento Espurio de DHSV",
+    "103": "Transiente/Iminente: Golfada Severa",
+    "104": "Transiente/Iminente: Instabilidade de Fluxo",
+    "105": "Transiente/Iminente: Perda Rapida de Produtividade",
+    "106": "Transiente/Iminente: Restricao Rapida em PCK",
+    "107": "Transiente/Iminente: Incrustacao em PCK",
+    "108": "Transiente/Iminente: Hidrato na Linha de Producao",
+    "109": "Transiente/Iminente: Hidrato na Linha de Servico"
+  }
+}
+
