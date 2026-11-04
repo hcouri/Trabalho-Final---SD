@@ -1,0 +1,62 @@
+{
+  "algoritmo": "RandomForestClassifier (numTrees=60, maxDepth=8) + KMeans (k=4)",
+  "features_utilizadas": [
+    "P_PDG_norm",
+    "P_TPT_norm",
+    "T_TPT_norm",
+    "P_MON_CKP_norm",
+    "T_JUS_CKP_norm",
+    "P_JUS_CKGL_norm",
+    "T_JUS_CKGL_norm",
+    "QGL_norm",
+    "z_score_medio",
+    "z_score_max",
+    "qtd_sensores_fora_2sigma",
+    "qtd_sensores_fora_3sigma",
+    "diferencial_pressao_norm",
+    "diferencial_temp_norm"
+  ],
+  "total_treino": 2389,
+  "total_teste": 611,
+  "accuracy": 0.9755,
+  "f1_score": 0.9755,
+  "weighted_precision": 0.9755,
+  "weighted_recall": 0.9755,
+  "matriz_confusao": [
+    {
+      "label_real": 0,
+      "predicao": 0,
+      "contagem": 310
+    },
+    {
+      "label_real": 0,
+      "predicao": 1,
+      "contagem": 5
+    },
+    {
+      "label_real": 1,
+      "predicao": 0,
+      "contagem": 5
+    },
+    {
+      "label_real": 1,
+      "predicao": 1,
+      "contagem": 170
+    },
+    {
+      "label_real": 1,
+      "predicao": 2,
+      "contagem": 2
+    },
+    {
+      "label_real": 2,
+      "predicao": 1,
+      "contagem": 3
+    },
+    {
+      "label_real": 2,
+      "predicao": 2,
+      "contagem": 116
+    }
+  ]
+}
