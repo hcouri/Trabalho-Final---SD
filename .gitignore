@@ -1,5 +1,8 @@
 venv/
+.venv/
 __pycache__/
 .env
 data/raw/*
+checkpoints/
+models/pipeline_ml_3w/
 !.gitignore

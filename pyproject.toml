@@ -1,0 +1,7 @@
+[tool.pyrefly]
+project-includes = ["src"]
+search-path = [".", "src", ".venv/Lib/site-packages", "venv/Lib/site-packages"]
+
+[tool.pyrefly.errors]
+missing-import = false
+
