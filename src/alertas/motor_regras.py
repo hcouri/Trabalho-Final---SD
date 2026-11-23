@@ -109,7 +109,7 @@ class MotorAlertas:
             anomalias, pontuais, iminentes = self.atualizar_historico(poco, agora, linha)
             regra, prioridade, severidade = self.escolher_regra(linha, anomalias, pontuais, iminentes)
 
-            if regra is None:
+            if regra is None or prioridade is None:
                 continue
             if self.esta_em_cooldown(poco, prioridade, agora):
                 self.total_suprimidos += 1
@@ -128,7 +128,7 @@ class MotorAlertas:
                 "pontuais_janela": pontuais,
                 "iminentes_janela": iminentes,
                 "score_max": linha["score_max"],
-                "z_max": round(linha["z_max"], 3),
+                "z_max": round(float(linha["z_max"] or 0.0), 3),
                 "timestamp_envio_primeiro": linha["envio_primeiro"],
                 "timestamp_envio_ultimo": linha["envio_ultimo"],
             })

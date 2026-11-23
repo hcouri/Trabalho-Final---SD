@@ -1,16 +1,18 @@
-# Documentação Técnica — Módulo 3: Consumo em Spark Streaming e Pipeline de ML (Pessoa 3)
+# Documentação Técnica — Módulo 3: Spark Streaming, ML, Persistência e Validação de Saídas (Pessoa 3)
 
-Este documento descreve em detalhes toda a implementação realizada pela **Pessoa 3**, explicando a arquitetura interna, as fórmulas de normalização online baseadas no **Trabalho 2**, o pipeline de Machine Learning (`pyspark.ml`) e os **pontos exatos de integração** com os módulos da **Pessoa 1**, **Pessoa 2** e **Pessoa 4**.
+Este documento descreve em detalhes toda a implementação realizada pela **Pessoa 3**, cobrindo o consumo em **PySpark Structured Streaming**, a normalização online com parâmetros do **Trabalho 2**, o pipeline preditivo em **`pyspark.ml`**, a **persistência validada das saídas em Parquet/Consola/Kafka** e a **extração dos números reais da execução** para a apresentação final.
 
 ---
 
-## 1. Checklist de Requisitos Atendidos (Pessoa 3)
+## 1. Checklist Completo de Requisitos Atendidos (Pessoa 3)
 
-| Tarefa da Especificação | Status | Arquivo(s) Responsável(is) |
+| Fase / Tarefa | Status | Arquivo(s) Responsável(is) |
 | :--- | :---: | :--- |
-| **1. Script PySpark com Structured Streaming para assinar o tópico Kafka do grupo (`telemetria-pocos`)** | ✅ Concluído | `src/streaming/consumidor_spark_ml.py` e `src/streaming/preprocessamento.py` |
-| **2. Camada de normalização e pré-processamento online utilizando os parâmetros estatísticos validados no Trabalho 2** | ✅ Concluído | `configs/parametros_estatisticos_t2.json`, `src/streaming/preprocessamento.py` e `src/streaming/gerar_parametros_t2.py` |
-| **3. Algoritmo de Machine Learning no Spark (`pyspark.ml`) para reconhecimento de padrões e detecção de anomalias pontuais ou iminentes** | ✅ Concluído | `src/ml/treinar_modelo.py`, `src/streaming/consumidor_spark_ml.py` e `src/streaming/teste_pipeline_p3.py` |
+| **1. Script PySpark Structured Streaming assinando o tópico Kafka (`telemetria-pocos`)** | ✅ Concluído | `src/streaming/consumidor_spark_ml.py` e `src/streaming/preprocessamento.py` |
+| **2. Camada de normalização Z-Score e pré-processamento online (parâmetros do Trabalho 2)** | ✅ Concluído | `configs/parametros_estatisticos_t2.json`, `src/streaming/preprocessamento.py` e `src/streaming/gerar_parametros_t2.py` |
+| **3. Algoritmo de Machine Learning no Spark (`pyspark.ml` — KMeans + RandomForest)** | ✅ Concluído | `src/ml/treinar_modelo.py`, `src/streaming/consumidor_spark_ml.py` e `models/metricas_modelo.json` |
+| **4. Persistência das saídas (eventos, agregações/médias por poço e alertas em Parquet + Consola + Kafka)** | ✅ Concluído | `src/streaming/consumidor_spark_ml.py` e `src/streaming/teste_pipeline_p3.py` |
+| **5. Validação das saídas e extração de números reais da execução para a apresentação** | ✅ Concluído | `src/streaming/validar_saidas_p3.py`, `resultados/resumo_metricas_p3.json`, `SLIDES_PESSOA_3.md` e `slides_pessoa_3.html` |
 
 ---
 
@@ -18,134 +20,101 @@ Este documento descreve em detalhes toda a implementação realizada pela **Pess
 
 ```mermaid
 flowchart LR
-    K["Tópico Kafka:\ntelemetria-pocos\n(Pessoa 1 e Pessoa 2)"] --> P["1. Parser Unificado\nparsear_stream_kafka()"]
+    K["Tópico Kafka:\ntelemetria-pocos\n(Pessoa 1 e Pessoa 2)"] --> P["1. Parser Unificado\nparsear_stream_kafka()\n(Pessoa 1 + evento_classe + Pessoa 2)"]
     P --> N["2. Pré-processamento Online\naplicar_preprocessamento_online()\n(Imputação + Z-Score Trabalho 2)"]
-    N --> M["3. Inferência pyspark.ml\naplicar_inferencia_ml_streaming()\n(KMeans + RandomForest)"]
-    M --> C["Console Monitor\n(Resumo por Micro-Batch)"]
-    M --> A["Tópico Kafka:\nalertas-operacionais\n(Integração Pessoa 4)"]
+    N --> M["3. Inferência pyspark.ml\naplicar_inferencia_ml_streaming()\n(KMeans k=4 + RandomForest)"]
+    M --> AG["4. Agregações/Médias por Poço\ncalcular_agregacoes_por_poco()"]
+    AG --> PQ["Persistência Parquet\nresultados/parquet/\n(eventos, agregacoes, alertas)"]
+    AG --> C["Consola\n(Resumo por Micro-Batch)"]
+    M --> A["Tópico Kafka:\nalertas-operacionais\n(Motor de Regras — Pessoa 4)"]
 ```
 
 ---
 
-## 3. Detalhamento dos Arquivos Implementados
+## 3. Detalhamento dos Arquivos Implementados e Atualizações Finais
 
-### 3.1. `configs/parametros_estatisticos_t2.json`
-Armazena os parâmetros estatísticos validados no **Trabalho 2** para os 8 sensores físicos do Dataset 3W da Petrobras:
-- **`P-PDG`**: Pressão no *Permanent Downhole Gauge* (fundo do poço)
-- **`P-TPT`**: Pressão no *Temperature and Pressure Transducer*
-- **`T-TPT`**: Temperatura no *Temperature and Pressure Transducer*
-- **`P-MON-CKP`**: Pressão a montante do *Choke* de Produção
-- **`T-JUS-CKP`**: Temperatura a jusante do *Choke* de Produção
-- **`P-JUS-CKGL`**: Pressão a jusante do *Choke* de *Gas Lift*
-- **`T-JUS-CKGL`**: Temperatura a jusante do *Choke* de *Gas Lift*
-- **`QGL`**: Vazão de *Gas Lift*
+### 3.1. `configs/parametros_estatisticos_t2.json` e `src/streaming/gerar_parametros_t2.py`
+Armazena média ($\mu$), desvio padrão ($\sigma$), mediana (imputação de `null`/`NaN`), limites operacionais e o mapa de classes do Dataset 3W (`0` = Normal, `1..9` = Falha Consolidada, `101..109` = Transiente/Iminente) para os 8 sensores físicos (`P-PDG`, `P-TPT`, `T-TPT`, `P-MON-CKP`, `T-JUS-CKP`, `P-JUS-CKGL`, `T-JUS-CKGL`, `QGL`). O script `gerar_parametros_t2.py` permite recalcular essas estatísticas em lotes a partir de `data/raw/`.
 
-Para cada sensor são mantidos:
-- `media` ($\mu$) e `desvio_padrao` ($\sigma$) na escala original em Pascal/°C do Dataset 3W;
-- `mediana` para imputação online de sensores ausentes (`null`/`NaN`);
-- `media_escala_reduzida` e `desvio_escala_reduzida` para suportar automaticamente eventos simulados em bar/kPa;
-- `mapa_classes_3w`: Dicionário completo com os nomes das falhas `0` (Operação Normal), `1` a `9` (Anomalias Pontuais/Consolidadas) e `101` a `109` (Anomalias Transientes/Iminentes).
+### 3.2. `src/streaming/preprocessamento.py`
+- **Parser Unificado (`parsear_stream_kafka`):** Compatível com **todos** os produtores do grupo:
+  - Produtor da **Pessoa 1** (`src/produtor/produtor_3w.py`), incluindo o novo produtor multi-poço 1Hz com metadados `poco_id`, `timestamp_envio`, `arquivo_origem`, `timestamp` e `evento_classe`;
+  - Contrato da **Pessoa 2** (`src/setup_kafka.py` e `src/teste_autonomo_p2.py`) com dicionário aninhado `sensores`;
+  - Gerador de carga da **Pessoa 4** (`src/benchmarks/gerador_carga.py`).
+- **Normalização Z-Score Online (`aplicar_preprocessamento_online`):** Imputa sensores nulos pela mediana do Trabalho 2, normaliza por $z_i = \frac{x_i - \mu_i}{\sigma_i}$ (com detecção automática entre escala Pascal e bar/kPa) e calcula 6 indicadores estatísticos/físicos em tempo real (`z_score_medio`, `z_score_max`, `qtd_sensores_fora_2sigma`, `qtd_sensores_fora_3sigma`, `diferencial_pressao_norm` e `diferencial_temp_norm`).
 
----
+### 3.3. `src/ml/treinar_modelo.py`
+Constrói e treina o `pyspark.ml.Pipeline` com split estrito **80% Treino / 20% Teste** antes do `fit()` (zero *data leakage*):
+1. `Imputer(strategy="median")`
+2. `VectorAssembler` (14 features normalizadas e estatísticas)
+3. `StandardScaler(withMean=True, withStd=True)`
+4. `KMeans(k=4)` — reconhecimento não-supervisionado de regimes operacionais (`cluster_padrao`)
+5. `RandomForestClassifier(numTrees=60, maxDepth=8)` — classificação em `0 = NORMAL`, `1 = ANOMALIA_IMINENTE` e `2 = ANOMALIA_PONTUAL`.
 
-### 3.2. `src/streaming/gerar_parametros_t2.py`
-Caso a equipe adicione novos arquivos `.parquet` na pasta `data/raw/`, este script percorre os arquivos **em lotes (streaming/batching do Trabalho 2)** acumulando soma, soma dos quadrados, mínimo, máximo e medianas por lote sem estourar a memória RAM, atualizando automaticamente o arquivo `configs/parametros_estatisticos_t2.json`.
+Métricas reais registradas em `models/metricas_modelo.json`:
+- **Acurácia:** `97,55%` (`2.389` amostras de treino / `611` amostras de teste)
+- **F1-Score / Precisão / Recall ponderados:** `0,9755`
+- **Erros críticos (Normal confundido com Pontual ou vice-versa):** **`0`** (erros ocorrem apenas entre classes adjacentes).
 
----
+### 3.4. `src/streaming/consumidor_spark_ml.py` (Streaming + Persistência Parquet + Consola)
+Atualizado para a etapa final de **Persistência e Validação das Saídas**:
+- `criar_spark_session()`: inclui configurações locais para Windows/Java (`SPARK_LOCAL_IP=127.0.0.1`, `spark.driver.host`, `spark.driver.bindAddress`, alinhadas à validação da Pessoa 2 em `validacao_spark_p2.py`) e 4 partições de shuffle.
+- `calcular_agregacoes_por_poco(df_predicoes, batch_id)`: calcula em tempo real por `poco_id` o total de eventos, anomalias pontuais/iminentes, taxa de anomalia (%), médias dos sensores (`P-PDG`, `P-TPT`, `T-TPT`, `P-MON-CKP`), `z_score_max`, score ML médio e latência média.
+- `persistir_saidas_parquet(...)`: grava automaticamente a cada micro-batch (habilitado por padrão; desativável com `--sem-parquet`) 3 camadas em formato colunar **Parquet**:
+  1. `resultados/parquet/eventos_processados/` *(particionado por `poco_id`)* — registros completos normalizados + predição ML;
+  2. `resultados/parquet/agregacoes_pocos/` — médias e contagens agregadas por poço;
+  3. `resultados/parquet/alertas_anomalias/` — apenas os eventos anômalos detectados.
+- `formatar_payload_alerta_kafka(...)` e `--publicar-alertas`: envia anomalias em JSON para o tópico `alertas-operacionais` (usado também pelo motor de regras R1/R2/R3 + Cooldown da Pessoa 4 em `src/alertas/pipeline_alertas.py`).
 
-### 3.3. `src/streaming/preprocessamento.py`
-
-#### Compatibilidade Simultânea com Pessoa 1 e Pessoa 2 (`parsear_stream_kafka`)
-No projeto, o produtor da **Pessoa 1** (`src/produtor/produtor_3w.py`) envia os sensores como chaves na raiz do JSON (ex.: `{"P-PDG": 452.12, "P-TP": 120.5, ...}`), enquanto o contrato de teste da **Pessoa 2** (`src/setup_kafka.py` e `src/teste_autonomo_p2.py`) envia um dicionário aninhado `{"sensores": {"P-PDG": 240.5, ...}}`.
-
-A função `parsear_stream_kafka(df_kafka)` utiliza `F.coalesce(...)` para buscar cada sensor tanto nas colunas raiz (incluindo os aliases `P-TP`, `T-TP`, `P-MON-CK`, `T-JSC`) quanto dentro de `sensores.<nome>`. Assim, **ambos os produtores funcionam sem nenhuma modificação adicional**.
-
-#### Normalização Z-Score e Engenharia de Atributos Online (`aplicar_preprocessamento_online`)
-Para cada evento recebido em tempo real:
-1. **Tratamento de Nulos (`NaN` / `None`):**
-   - Calcula quantos sensores vieram preenchidos (`sensores_ativos`) e a proporção de falhas de leitura (`taxa_nulos_linha`).
-   - Gera colunas imputadas (`<sensor>_imp`) substituindo nulos pela mediana histórica do Trabalho 2.
-2. **Normalização Z-Score Online:**
-   $$z_i = \frac{x_i - \mu_i}{\sigma_i}$$
-   - Sensores nulos recebem $z_i = 0.0$ (equivalente à média da distribuição normalizada).
-   - O valor é limitado ao intervalo $[-10.0, +10.0]$ para evitar que *outliers* extremos de falha de sensor corrompam o vetor numérico.
-3. **Atributos Multivariados e Físicos Calculados em Streaming:**
-   - `z_score_medio`: Média de $|z_i|$ entre os sensores ativos do evento.
-   - `z_score_max`: Maior desvio $|z_i|$ observado no evento.
-   - `qtd_sensores_fora_2sigma`: Número de sensores com $|z_i| \ge 2.0$ (indicador estatístico de **anomalia iminente/transiente**).
-   - `qtd_sensores_fora_3sigma`: Número de sensores com $|z_i| \ge 3.0$ (indicador estatístico de **anomalia pontual crítica**).
-   - `diferencial_pressao_norm`: $P_{\text{PDG, norm}} - P_{\text{TPT, norm}}$ (captura restrições de coluna, fechamento espúrio de DHSV e golfadas severas).
-   - `diferencial_temp_norm`: $T_{\text{TPT, norm}} - T_{\text{JUS-CKP, norm}}$ (captura o efeito Joule-Thomson no *choke* de produção).
+### 3.5. `src/streaming/validar_saidas_p3.py` e `src/streaming/teste_pipeline_p3.py`
+- **`teste_pipeline_p3.py`:** valida de forma autônoma (sem depender de Kafka ativo) o parser unificado (incluindo `evento_classe`), a normalização online, a inferência `pyspark.ml`, as agregações por poço e a **gravação + releitura em Parquet** com `assert` nas 3 camadas.
+- **`validar_saidas_p3.py`:** audita as camadas Parquet e todos os CSVs reais em `resultados/`, verifica se **100% dos alertas emitidos pelo Spark chegaram ao Kafka (perda = 0)** e gera `resultados/resumo_metricas_p3.json`.
 
 ---
 
-### 3.4. `src/ml/treinar_modelo.py`
-Implementa o pipeline de treinamento e validação utilizando **`pyspark.ml`**:
-1. **Prevenção de *Data Leakage*:** Os dados são divididos em **Treino (80%)** e **Teste (20%)** (`randomSplit([0.8, 0.2], seed=42)`) **antes** do `pipeline.fit(df_treino)`.
-2. **Estágios do `pyspark.ml.Pipeline`:**
-   - `Imputer(strategy="median")`: Garante ausência de nulos nas 14 features.
-   - `VectorAssembler`: Agrupa as 14 colunas em `features_raw`.
-   - `StandardScaler(withMean=True, withStd=True)`: Padroniza o vetor em `features`.
-   - `KMeans(k=4)`: Reconhecimento não-supervisionado de padrões operacionais, gerando a coluna `cluster_padrao` (`0`, `1`, `2` ou `3`).
-   - `RandomForestClassifier(numTrees=60, maxDepth=8)`: Classifica cada registro em 3 estados operacionais (`predicao_ml` e `probabilidade_ml`):
-     - `0.0` $\rightarrow$ **`NORMAL`**
-     - `1.0` $\rightarrow$ **`ANOMALIA_IMINENTE`** (classes transientes `101..109` do 3W ou deriva incipiente entre $2\sigma$ e $3\sigma$)
-     - `2.0` $\rightarrow$ **`ANOMALIA_PONTUAL`** (classes de falha consolidada `1..9` do 3W ou desvio crítico $\ge 3\sigma$)
-3. **Treinamento Autônomo:** Se a pasta `data/raw/` contiver arquivos Parquet do 3W, o treinamento amostra os arquivos em lotes; caso `data/raw/` esteja vazia no computador do integrante, o script gera automaticamente 3.000 registros sintéticos calibrados com os parâmetros do Trabalho 2 para treinar e salvar o modelo em `models/pipeline_ml_3w`.
-4. **Métricas Exportadas (`models/metricas_modelo.json`):** Salva automaticamente *Accuracy*, *F1-Score*, *Weighted Precision*, *Weighted Recall* e a Matriz de Confusão para uso direto nos gráficos da **Pessoa 4**.
+## 4. Validação das Saídas & Números Reais da Execução (Para Citar na Apresentação)
+
+Os dados abaixo foram extraídos diretamente das execuções reais registradas em `resultados/batches_taxa_*.csv`, `resultados/latencia_taxa_*.csv`, `resultados/memoria_taxa_*.csv` e `models/metricas_modelo.json` (consolidados em `resultados/resumo_metricas_p3.json`):
+
+### 4.1. Números Consolidados (Soma dos 4 Experimentos)
+- **Total de eventos processados:** **198.000 eventos** em **219 micro-batches** (120 s por taxa)
+- **Poços monitorados com anomalias detectadas:** **20 poços** (`WELL-B01` a `WELL-B20`)
+- **Anomalias detectadas pelo ML:** **3.971 anomalias** (**2,01%** dos eventos — batendo com os 2% injetados)
+- **Alertas emitidos após regras de negócio:** **2.092 alertas** (**redução média de 47,3%** no ruído operacional; até **56,2%** a 1.000 msg/s)
+- **Integridade na entrega (Spark → Kafka → Consumidor):** **2.092 enviados = 2.092 recebidos (0 mensagens perdidas)**
+- **Acurácia / F1-Score do modelo `pyspark.ml`:** **97,55%** (**0 confusões** entre *Normal* e *Anomalia Pontual Crítica*)
+
+### 4.2. Comparativo Real por Taxa de Throughput
+
+| Taxa (msg/s) | Eventos Processados | Micro-batches | Tempo Médio/Batch | Anomalias ML | Alertas Emitidos | Redução de Ruído | Latência Média E2E | Latência P95 | Latência Kafka | Memória Spark |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **50** | 6.000 | 54 | 1,04 s | 135 (2,25%) | 130 | 3,7% | **3,31 s** | 5,43 s | 14,9 ms | 1.049 MB |
+| **100** | 12.000 | 52 | 1,07 s | 249 (2,08%) | 219 | 12,0% | **3,31 s** | 5,43 s | 6,8 ms | 924 MB |
+| **500** | 60.000 | 52 | 1,07 s | 1.239 (2,06%) | 714 | 42,4% | **3,56 s** | 6,32 s | 8,0 ms | 934 MB |
+| **1000** | 120.000 | 61 | 0,99 s | 2.348 (1,96%) | 1.029 | 56,2% | **21,52 s** *(saturação do teto 2000/batch)* | 26,62 s | 6,1 ms | 941 MB |
+
+> **Leitura para a apresentação:** De 50 até 500 msg/s (aumento de 10x na carga), a latência média manteve-se estável em **~3,3 s**, o tempo de cada micro-batch permaneceu em **~1,0 s** e a memória do Spark ficou constante em **~930–1.049 MB**. Em 1.000 msg/s houve acúmulo no Kafka apenas pelo teto configurado de `maxOffsetsPerTrigger=2000` a cada 2 s (~950 msg/s), sem nenhuma perda de dados.
 
 ---
 
-### 3.5. `src/streaming/consumidor_spark_ml.py`
-É o motor principal de execução em tempo real:
-- Inicializa a `SparkSession` carregando automaticamente o conector `org.apache.spark:spark-sql-kafka-0-10` compatível com a versão do PySpark instalada e configura `spark.sql.shuffle.partitions = 4` (alinhado às 4 partições do tópico `telemetria-pocos` definidas pela **Pessoa 2**).
-- Carrega o `PipelineModel` de `models/pipeline_ml_3w` (ou executa o treinamento inicial automaticamente caso a pasta `models/` ainda não exista).
-- Em cada micro-batch, aplica o pré-processamento online + `modelo_ml.transform()`, extrai as probabilidades por classe (`prob_normal`, `prob_anomalia_iminente`, `prob_anomalia_pontual`, `score_anomalia_ml`, `confianca_predicao`) e define:
-  - `status_operacional`: `"NORMAL"`, `"ANOMALIA_IMINENTE"` ou `"ANOMALIA_PONTUAL"`
-  - `severidade`: `"NORMAL"`, `"ALERTA_PREVENTIVO"` ou `"CRITICA"`
-  - `diagnostico_padrao`: Nome descritivo da falha no Dataset 3W (ex.: `"Golfada Severa (Severe Slugging)"`, `"Transiente/Iminente: Restricao Rapida em PCK"`).
-  - `latencia_end_to_end_ms`: $(t_{\text{inferencia}} - t_{\text{envio}}) \times 1000$, medindo em milissegundos o tempo total desde o disparo pelo Produtor Kafka (Pessoa 1) até a conclusão da predição no Spark (Pessoa 3).
+## 5. Comandos de Execução do Módulo 3
+
+```bash
+# 1. Treinar / validar o modelo pyspark.ml e atualizar models/metricas_modelo.json
+python -m src.ml.treinar_modelo
+
+# 2. Validar pipeline completo offline (Parser + ML + Agregações + Gravação/Releitura Parquet)
+python -m src.streaming.teste_pipeline_p3
+
+# 3. Rodar o consumidor Spark Streaming gravando Consola + Parquet + Alertas Kafka
+python -m src.streaming.consumidor_spark_ml --bootstrap-servers localhost:9092 --topico-entrada telemetria-pocos --publicar-alertas
+
+# 4. Auditar saídas Parquet/CSV e gerar resumo JSON de métricas reais
+python -m src.streaming.validar_saidas_p3
+```
 
 ---
 
-## 4. Guia de Integração para os Outros Integrantes
-
-### Para a Pessoa 1 (Produtor Kafka) e Pessoa 2 (Infraestrutura Kafka)
-- O consumidor Spark assina por padrão `localhost:9092` e o tópico `telemetria-pocos`.
-- Ambos os esquemas JSON (`src/produtor/produtor_3w.py` da Pessoa 1 e `src/teste_autonomo_p2.py` da Pessoa 2) são reconhecidos automaticamente.
-
-### Para a Pessoa 4 (Módulo de Alertas, Benchmarks e Relatório Técnico)
-1. **Publicação no tópico `alertas-operacionais`:**
-   Basta iniciar o consumidor passando a flag `--publicar-alertas`:
-   ```bash
-   python -m src.streaming.consumidor_spark_ml --publicar-alertas
-   ```
-   Toda mensagem classificada como `ANOMALIA_IMINENTE` ou `ANOMALIA_PONTUAL` é filtrada pela função `formatar_payload_alerta_kafka()` e enviada ao tópico `alertas-operacionais` com o seguinte JSON:
-   ```json
-   {
-     "poco_id": "WELL-00003",
-     "arquivo_origem": "WELL-00003_20180115091200.parquet",
-     "timestamp_evento": "2026-11-04 10:30:00",
-     "timestamp_envio": 1730727000.112,
-     "timestamp_inferencia": 1730727000.298,
-     "latencia_end_to_end_ms": 186.0,
-     "status_operacional": "ANOMALIA_PONTUAL",
-     "severidade": "CRITICA",
-     "cluster_padrao": 2,
-     "predicao_ml": 2.0,
-     "score_anomalia_ml": 0.9612,
-     "confianca_predicao": 0.9145,
-     "z_score_medio": 3.412,
-     "z_score_max": 4.536,
-     "sensores_acima_2sigma": 6,
-     "sensores_acima_3sigma": 4,
-     "classe_real": 3,
-     "diagnostico_padrao": "Golfada Severa (Severe Slugging)"
-   }
-   ```
-2. **Medição de Latência End-to-End e Throughput (Benchmarks):**
-   - O campo `latencia_end_to_end_ms` já entrega a latência fim a fim de cada evento (do `timestamp_envio` no Produtor Kafka até a saída do modelo ML no Spark).
-   - O console também imprime, a cada micro-batch, a **Latência E2E média por status** e o **Tempo de processamento do micro-batch (ms)**.
-3. **Métricas de Acurácia do Modelo para o Relatório Final:**
-   - Ao rodar `python -m src.ml.treinar_modelo`, o arquivo `models/metricas_modelo.json` é gerado automaticamente contendo `accuracy`, `f1_score`, `weighted_precision`, `weighted_recall` e `matriz_confusao`.
-
+## 6. Material de Apresentação da Pessoa 3
+- Roteiro completo de slides e fala cronometrada (1 a 2 min): [`SLIDES_PESSOA_3.md`](SLIDES_PESSOA_3.md)
+- Apresentação visual interativa (pronta para navegador / exportar PDF): [`slides_pessoa_3.html`](slides_pessoa_3.html)

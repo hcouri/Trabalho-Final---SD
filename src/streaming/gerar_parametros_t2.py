@@ -7,13 +7,15 @@ desvio padrão, mediana, mínimo e máximo com baixo consumo de memória e
 atualiza o arquivo configs/parametros_estatisticos_t2.json.
 """
 
+from dataclasses import dataclass, field
 import json
 import math
 from pathlib import Path
-import pandas as pd  # pyrefly: ignore[missing-import]
+from typing import Any, Dict, List, Optional
+import pandas as pd
 
 CAMINHO_CONFIG_PADRAO = Path("configs/parametros_estatisticos_t2.json")
-SENSORES_3W = [
+SENSORES_3W: List[str] = [
     "P-PDG",
     "P-TPT",
     "T-TPT",
@@ -25,7 +27,21 @@ SENSORES_3W = [
 ]
 
 
-def calcular_estatisticas_em_batches(diretorio_raw: str = "data/raw", max_arquivos: int = 200):
+@dataclass
+class AcumuladorSensor:
+    """Acumulador tipado para cálculo incremental das estatísticas por lote."""
+
+    n: int = 0
+    soma: float = 0.0
+    soma_quad: float = 0.0
+    minimo: float = float("inf")
+    maximo: float = float("-inf")
+    medianas_lote: List[float] = field(default_factory=list)
+
+
+def calcular_estatisticas_em_batches(
+    diretorio_raw: str = "data/raw", max_arquivos: int = 200
+) -> Optional[Dict[str, Any]]:
     """
     Varre os arquivos Parquet em lotes (streaming/batching do Trabalho 2)
     acumulando soma, soma dos quadrados, contagem, mínimo, máximo e medianas por lote,
@@ -44,16 +60,8 @@ def calcular_estatisticas_em_batches(diretorio_raw: str = "data/raw", max_arquiv
     arquivos_selecionados = arquivos[:max_arquivos]
     print(f"[INFO] Calculando estatísticas incrementais em {len(arquivos_selecionados)} arquivos...")
 
-    acumuladores = {
-        s: {
-            "n": 0,
-            "soma": 0.0,
-            "soma_quad": 0.0,
-            "min": float("inf"),
-            "max": float("-inf"),
-            "medianas_lote": [],
-        }
-        for s in SENSORES_3W
+    acumuladores: Dict[str, AcumuladorSensor] = {
+        s: AcumuladorSensor() for s in SENSORES_3W
     }
 
     for arquivo in arquivos_selecionados:
@@ -68,32 +76,32 @@ def calcular_estatisticas_em_batches(diretorio_raw: str = "data/raw", max_arquiv
                     continue
 
                 acc = acumuladores[sensor]
-                acc["n"] += qtd
-                acc["soma"] += float(serie.sum())
-                acc["soma_quad"] += float((serie ** 2).sum())
-                acc["min"] = min(acc["min"], float(serie.min()))
-                acc["max"] = max(acc["max"], float(serie.max()))
-                acc["medianas_lote"].append(float(serie.median()))
+                acc.n += qtd
+                acc.soma += float(serie.sum())
+                acc.soma_quad += float((serie ** 2).sum())
+                acc.minimo = min(acc.minimo, float(serie.min()))
+                acc.maximo = max(acc.maximo, float(serie.max()))
+                acc.medianas_lote.append(float(serie.median()))
         except Exception as exc:
             print(f"[AVISO] Erro ao ler {arquivo.name}: {exc}")
 
     with open(CAMINHO_CONFIG_PADRAO, "r", encoding="utf-8") as f:
-        config_atual = json.load(f)
+        config_atual: Dict[str, Any] = json.load(f)
 
     sensores_atualizados = 0
     for sensor, acc in acumuladores.items():
-        if acc["n"] > 10:
-            media = acc["soma"] / acc["n"]
-            variancia = max((acc["soma_quad"] / acc["n"]) - (media ** 2), 1e-6)
+        if acc.n > 10:
+            media = acc.soma / acc.n
+            variancia = max((acc.soma_quad / acc.n) - (media ** 2), 1e-6)
             desvio = math.sqrt(variancia)
-            mediana_aprox = float(pd.Series(acc["medianas_lote"]).median())
+            mediana_aprox = float(pd.Series(acc.medianas_lote).median())
 
-            cfg_sensor = config_atual["sensores"].get(sensor, {})
+            cfg_sensor: Dict[str, Any] = config_atual["sensores"].get(sensor, {})
             cfg_sensor["media"] = round(media, 6)
             cfg_sensor["desvio_padrao"] = round(desvio, 6)
             cfg_sensor["mediana"] = round(mediana_aprox, 6)
-            cfg_sensor["min"] = round(acc["min"], 6)
-            cfg_sensor["max"] = round(acc["max"], 6)
+            cfg_sensor["min"] = round(acc.minimo, 6)
+            cfg_sensor["max"] = round(acc.maximo, 6)
             config_atual["sensores"][sensor] = cfg_sensor
             sensores_atualizados += 1
 
@@ -110,4 +118,3 @@ def calcular_estatisticas_em_batches(diretorio_raw: str = "data/raw", max_arquiv
 
 if __name__ == "__main__":
     calcular_estatisticas_em_batches()
-

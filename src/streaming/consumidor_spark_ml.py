@@ -1,28 +1,31 @@
 """
-Consumidor PySpark Structured Streaming e Pipeline de Inferência ML Online (Pessoa 3).
+Consumidor PySpark Structured Streaming, Pipeline de Inferência ML Online
+e Persistência de Saídas/Agregações em Parquet (Pessoa 3).
 
-Este módulo cumpre as Tarefas 1, 2 e 3 da Pessoa 3 em tempo real:
+Este módulo cumpre integralmente as responsabilidades da Pessoa 3:
 1. Assina o tópico Kafka `telemetria-pocos` via Spark Structured Streaming.
 2. Aplica a camada de normalização Z-Score e pré-processamento online utilizando os
    parâmetros estatísticos validados no Trabalho 2 (`src/streaming/preprocessamento.py`).
 3. Executa o `pyspark.ml.PipelineModel` (`KMeans` + `RandomForestClassifier`) em cada
    micro-batch para reconhecimento de padrões operacionais e detecção de anomalias
    pontuais ou iminentes.
-4. Calcula a latência end-to-end (`latencia_end_to_end_ms`) desde o `timestamp_envio`
-   do Produtor Kafka até a conclusão da inferência no Spark e permite publicar
-   automaticamente anomalias no tópico `alertas-operacionais` (integração com Pessoa 4).
+4. Calcula agregações e médias em tempo real por poço (`calcular_agregacoes_por_poco`)
+   e persiste as saídas validadas em **Parquet** (`resultados/parquet/`), na **Consola**
+   e opcionalmente no tópico Kafka `alertas-operacionais` (integração com Pessoa 4).
 """
 
 import argparse
 import os
+import sys
 import time
+from pathlib import Path
 from typing import Dict, Any, Optional
 
-import pyspark  # pyrefly: ignore[missing-import]
-from pyspark.sql import SparkSession, DataFrame  # pyrefly: ignore[missing-import]
-from pyspark.sql import functions as F  # pyrefly: ignore[missing-import]
-from pyspark.ml import PipelineModel  # pyrefly: ignore[missing-import]
-from pyspark.ml.functions import vector_to_array  # pyrefly: ignore[missing-import]
+import pyspark
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import functions as F
+from pyspark.ml import PipelineModel
+from pyspark.ml.functions import vector_to_array
 
 from src.streaming.preprocessamento import (
     carregar_parametros_estatisticos,
@@ -36,6 +39,7 @@ KAFKA_BROKER_PADRAO = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPICO_ENTRADA_PADRAO = os.getenv("KAFKA_TOPIC_TELEMETRIA", "telemetria-pocos")
 TOPICO_ALERTAS_PADRAO = os.getenv("KAFKA_TOPIC_ALERTAS", "alertas-operacionais")
 CHECKPOINT_DIR_PADRAO = "checkpoints/spark_streaming_3w"
+DIR_PARQUET_PADRAO = "resultados/parquet"
 
 
 def criar_spark_session(
@@ -43,10 +47,15 @@ def criar_spark_session(
     incluir_conector_kafka: bool = True,
 ) -> SparkSession:
     """
-    Inicializa a SparkSession otimizada para baixa latência em Structured Streaming
-    e carrega automaticamente o pacote oficial `spark-sql-kafka-0-10` compatível
-    com a versão do PySpark instalada.
+    Inicializa a SparkSession otimizada para baixa latência em Structured Streaming,
+    com configurações seguras para execução no Windows/Java 17+ e carregamento
+    automático do conector oficial `spark-sql-kafka-0-10`.
     """
+    # Garante compatibilidade local em ambientes Windows (mesmo padrão validado pela Pessoa 2)
+    os.environ.setdefault("SPARK_LOCAL_IP", "127.0.0.1")
+    os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
+    os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
+
     versao_spark = pyspark.__version__.split(".dev")[0]
     # Spark 3.x utiliza Scala 2.12; Spark 4.x utiliza Scala 2.13
     scala_binary = "2.13" if versao_spark.startswith("4.") else "2.12"
@@ -55,6 +64,8 @@ def criar_spark_session(
     builder = (
         SparkSession.builder.appName(app_name)
         .master(os.getenv("SPARK_MASTER", "local[*]"))
+        .config("spark.driver.host", os.getenv("SPARK_LOCAL_IP", "127.0.0.1"))
+        .config("spark.driver.bindAddress", os.getenv("SPARK_LOCAL_IP", "127.0.0.1"))
         # 4 partições de shuffle alinham-se às 4 partições do tópico Kafka (definidas pela Pessoa 2)
         .config("spark.sql.shuffle.partitions", "4")
         .config("spark.ui.showConsoleProgress", "false")
@@ -132,7 +143,8 @@ def aplicar_inferencia_ml_streaming(
     )
 
     # Mapeia o código de falha 3W (ou diagnóstico inferido pelo cluster + classificador)
-    expr_mapa = F.create_map([F.lit(x) for par in mapa_classes.items() for x in par])
+    itens_mapa = [F.lit(str(x)) for par in mapa_classes.items() for x in par]
+    expr_mapa = F.create_map(*itens_mapa) if itens_mapa else F.create_map()
     df_pred = df_pred.withColumn(
         "diagnostico_padrao",
         F.when(
@@ -160,10 +172,7 @@ def aplicar_inferencia_ml_streaming(
     )
 
     # Medição de latência end-to-end: diferença entre o término da inferência no Spark e o timestamp_envio do Produtor
-    ts_atual_sec = (
-        F.unix_timestamp(F.current_timestamp()).cast("double")
-        + (F.unix_millis(F.current_timestamp()) % 1000) / 1000.0
-    )
+    ts_atual_sec = F.current_timestamp().cast("double")
     df_pred = df_pred.withColumn("timestamp_inferencia", ts_atual_sec).withColumn(
         "latencia_end_to_end_ms",
         F.when(
@@ -173,6 +182,140 @@ def aplicar_inferencia_ml_streaming(
     )
 
     return df_pred
+
+
+def calcular_agregacoes_por_poco(df_predicoes: DataFrame, batch_id: int = 0) -> DataFrame:
+    """
+    Calcula agregações e médias operacionais por poço (`poco_id`) em cada micro-batch:
+      - Total de eventos processados, anomalias pontuais e anomalias iminentes
+      - Médias dos sensores principais (`P-PDG`, `P-TPT`, `T-TPT`, `P-MON-CKP`)
+      - Score ML médio, Z-Score máximo, latência média end-to-end e taxa de anomalia (%)
+    Essas agregações são exibidas na consola e persistidas em Parquet.
+    """
+    pontual = F.col("status_operacional") == "ANOMALIA_PONTUAL"
+    iminente = F.col("status_operacional") == "ANOMALIA_IMINENTE"
+    anomalia = F.col("status_operacional") != "NORMAL"
+
+    return (
+        df_predicoes.groupBy("poco_id")
+        .agg(
+            F.lit(batch_id).alias("batch_id"),
+            F.current_timestamp().alias("timestamp_agregacao"),
+            F.count("*").alias("total_eventos"),
+            F.sum(F.when(anomalia, 1).otherwise(0)).alias("total_anomalias"),
+            F.sum(F.when(pontual, 1).otherwise(0)).alias("anomalias_pontuais"),
+            F.sum(F.when(iminente, 1).otherwise(0)).alias("anomalias_iminentes"),
+            F.round(F.avg(F.col("P_PDG_imp")), 2).alias("media_p_pdg"),
+            F.round(F.avg(F.col("P_TPT_imp")), 2).alias("media_p_tpt"),
+            F.round(F.avg(F.col("T_TPT_imp")), 2).alias("media_t_tpt"),
+            F.round(F.avg(F.col("P_MON_CKP_imp")), 2).alias("media_p_mon_ckp"),
+            F.round(F.avg("z_score_medio"), 3).alias("z_score_medio_poco"),
+            F.round(F.max("z_score_max"), 3).alias("z_score_max_poco"),
+            F.round(F.avg("score_anomalia_ml"), 4).alias("score_ml_medio"),
+            F.round(F.avg("latencia_end_to_end_ms"), 2).alias("latencia_media_ms"),
+        )
+        .withColumn(
+            "taxa_anomalia_pct",
+            F.round((F.col("total_anomalias") / F.col("total_eventos")) * 100.0, 2),
+        )
+        .orderBy(F.desc("total_anomalias"), F.asc("poco_id"))
+    )
+
+
+def extrair_alertas_estruturados(df_predicoes: DataFrame, batch_id: int = 0) -> DataFrame:
+    """
+    Seleciona os registros anômalos (`ANOMALIA_IMINENTE` ou `ANOMALIA_PONTUAL`)
+    com colunas planas e tipadas para persistência analítica em Parquet.
+    """
+    return (
+        df_predicoes.filter(F.col("status_operacional") != "NORMAL")
+        .select(
+            F.lit(batch_id).alias("batch_id"),
+            F.col("poco_id"),
+            F.col("arquivo_origem"),
+            F.col("timestamp_evento_str").alias("timestamp_evento"),
+            F.col("timestamp_envio"),
+            F.col("timestamp_inferencia"),
+            F.col("latencia_end_to_end_ms"),
+            F.col("status_operacional"),
+            F.col("severidade"),
+            F.col("cluster_padrao"),
+            F.col("predicao_ml"),
+            F.col("score_anomalia_ml"),
+            F.col("confianca_predicao"),
+            F.round(F.col("z_score_medio"), 3).alias("z_score_medio"),
+            F.round(F.col("z_score_max"), 3).alias("z_score_max"),
+            F.col("qtd_sensores_fora_2sigma").cast("int").alias("sensores_acima_2sigma"),
+            F.col("qtd_sensores_fora_3sigma").cast("int").alias("sensores_acima_3sigma"),
+            F.col("classe_real"),
+            F.col("diagnostico_padrao"),
+        )
+    )
+
+
+def persistir_saidas_parquet(
+    batch_df: DataFrame,
+    df_agregacoes: DataFrame,
+    df_alertas_estruturados: DataFrame,
+    batch_id: int,
+    diretorio_parquet: str = DIR_PARQUET_PADRAO,
+) -> Dict[str, Any]:
+    """
+    Persiste as três camadas de saída do pipeline em formato colunar **Parquet**
+    (modo append), garantindo rastreabilidade e auditoria pós-execução:
+      1. `<diretorio_parquet>/eventos_processados` (particionado por `poco_id`)
+      2. `<diretorio_parquet>/agregacoes_pocos` (médias e contagens por poço/batch)
+      3. `<diretorio_parquet>/alertas_anomalias` (somente anomalias detectadas)
+    """
+    base = Path(diretorio_parquet)
+    path_eventos = str(base / "eventos_processados")
+    path_agregacoes = str(base / "agregacoes_pocos")
+    path_alertas = str(base / "alertas_anomalias")
+
+    # 1. Camada Silver: eventos normalizados + resultado da inferência ML (sem colunas Vector complexas)
+    df_eventos_saida = batch_df.select(
+        F.lit(batch_id).alias("batch_id"),
+        "poco_id",
+        "arquivo_origem",
+        "timestamp_evento_str",
+        "timestamp_envio",
+        "timestamp_inferencia",
+        "latencia_end_to_end_ms",
+        "classe_real",
+        "sensores_ativos",
+        "P_PDG_imp",
+        "P_TPT_imp",
+        "T_TPT_imp",
+        "P_MON_CKP_imp",
+        "z_score_medio",
+        "z_score_max",
+        "qtd_sensores_fora_2sigma",
+        "qtd_sensores_fora_3sigma",
+        "cluster_padrao",
+        "predicao_ml",
+        "score_anomalia_ml",
+        "confianca_predicao",
+        "status_operacional",
+        "severidade",
+        "diagnostico_padrao",
+    )
+
+    df_eventos_saida.write.mode("append").partitionBy("poco_id").parquet(path_eventos)
+
+    # 2. Camada Gold (Agregações/Médias por Poço)
+    df_agregacoes.write.mode("append").parquet(path_agregacoes)
+
+    # 3. Camada Gold (Alertas de Anomalias)
+    qtd_alertas = df_alertas_estruturados.count()
+    if qtd_alertas > 0:
+        df_alertas_estruturados.write.mode("append").parquet(path_alertas)
+
+    return {
+        "eventos_path": path_eventos,
+        "agregacoes_path": path_agregacoes,
+        "alertas_path": path_alertas,
+        "alertas_gravados": qtd_alertas,
+    }
 
 
 def formatar_payload_alerta_kafka(df_predicoes: DataFrame) -> DataFrame:
@@ -214,12 +357,16 @@ def _processar_micro_batch(
     batch_df: DataFrame,
     batch_id: int,
     publicar_alertas: bool = False,
+    salvar_parquet: bool = True,
+    diretorio_parquet: str = DIR_PARQUET_PADRAO,
     bootstrap_servers: str = KAFKA_BROKER_PADRAO,
     topico_alertas: str = TOPICO_ALERTAS_PADRAO,
 ):
     """
     Função callback invocada pelo `foreachBatch` a cada micro-batch do Spark Streaming.
-    Exibe resumo executivo, amostra de predições e publica alertas no Kafka se configurado.
+    Exibe resumo executivo e agregações por poço na consola, persiste as saídas
+    em Parquet (`eventos_processados`, `agregacoes_pocos`, `alertas_anomalias`)
+    e publica alertas no tópico Kafka se configurado.
     """
     total_eventos = batch_df.count()
     if total_eventos == 0:
@@ -241,12 +388,16 @@ def _processar_micro_batch(
             .collect()
         )
 
-        print(f"\n{'=' * 85}")
+        # Calcula agregações/médias por poço e extrai alertas estruturados do micro-batch
+        df_agregacoes = calcular_agregacoes_por_poco(batch_df, batch_id=batch_id)
+        df_alertas_estruturados = extrair_alertas_estruturados(batch_df, batch_id=batch_id)
+
+        print(f"\n{'=' * 90}")
         print(
             f" [SPARK STREAMING + ML | BATCH #{batch_id}] "
             f"Eventos processados: {total_eventos}"
         )
-        print(f"{'-' * 85}")
+        print(f"{'-' * 90}")
         for r in resumo:
             print(
                 f"  -> Status: {r['status_operacional']:<18} | "
@@ -255,7 +406,20 @@ def _processar_micro_batch(
                 f"Z-Max Médio: {r['z_max_medio']:<5} | "
                 f"Latência E2E: {r['latencia_media_ms']} ms"
             )
-        print(f"{'-' * 85}")
+        print(f"{'-' * 90}")
+
+        print(" [AGREGAÇÕES E MÉDIAS POR POÇO - CONSOLA]")
+        df_agregacoes.select(
+            "poco_id",
+            "total_eventos",
+            "total_anomalias",
+            "anomalias_pontuais",
+            "anomalias_iminentes",
+            "taxa_anomalia_pct",
+            "z_score_max_poco",
+            "score_ml_medio",
+            "latencia_media_ms",
+        ).show(10, truncate=False)
 
         colunas_exibicao = [
             "poco_id",
@@ -269,6 +433,19 @@ def _processar_micro_batch(
             "latencia_end_to_end_ms",
         ]
         batch_df.select(*colunas_exibicao).show(10, truncate=False)
+
+        if salvar_parquet:
+            info_parquet = persistir_saidas_parquet(
+                batch_df=batch_df,
+                df_agregacoes=df_agregacoes,
+                df_alertas_estruturados=df_alertas_estruturados,
+                batch_id=batch_id,
+                diretorio_parquet=diretorio_parquet,
+            )
+            print(
+                f" [PARQUET PERSISTIDO] Diretório: '{diretorio_parquet}' | "
+                f"Eventos: {total_eventos} | Alertas gravados: {info_parquet['alertas_gravados']}"
+            )
 
         if publicar_alertas:
             df_alertas = formatar_payload_alerta_kafka(batch_df)
@@ -286,7 +463,7 @@ def _processar_micro_batch(
 
         duracao_ms = (time.time() - inicio_batch) * 1000.0
         print(f" Tempo de processamento do micro-batch #{batch_id}: {duracao_ms:.2f} ms")
-        print(f"{'=' * 85}")
+        print(f"{'=' * 90}")
     finally:
         batch_df.unpersist()
 
@@ -298,25 +475,29 @@ def iniciar_streaming(
     starting_offsets: str = "latest",
     intervalo_trigger: str = "2 seconds",
     publicar_alertas: bool = False,
+    salvar_parquet: bool = True,
+    diretorio_parquet: str = DIR_PARQUET_PADRAO,
     max_offsets_por_trigger: int = 2000,
 ):
     """
     Inicia o pipeline completo de Structured Streaming assinando o tópico Kafka,
-    aplicando a normalização online do Trabalho 2 e executando a inferência `pyspark.ml`.
+    aplicando a normalização online do Trabalho 2, executando a inferência `pyspark.ml`
+    e gravando as saídas validadas na consola, em Parquet e/ou no Kafka.
     """
     spark = criar_spark_session(incluir_conector_kafka=True)
     parametros = carregar_parametros_estatisticos()
     modelo_ml = obter_ou_treinar_modelo(spark, caminho_modelo=CAMINHO_MODELO_PADRAO)
 
-    print("=" * 75)
+    print("=" * 78)
     print(" INICIANDO CONSUMIDOR SPARK STRUCTURED STREAMING + PIPELINE ML (PESSOA 3)")
-    print("=" * 75)
+    print("=" * 78)
     print(f" Broker Kafka           : {bootstrap_servers}")
     print(f" Tópico Assinado        : {topico_entrada} (startingOffsets={starting_offsets})")
     print(f" Modelo Carregado       : {CAMINHO_MODELO_PADRAO}")
     print(f" Intervalo de MicroBatch: {intervalo_trigger}")
+    print(f" Persistência Parquet   : {'ATIVO (' + diretorio_parquet + ')' if salvar_parquet else 'DESATIVADO'}")
     print(f" Publicar Alertas Kafka : {'ATIVO (' + topico_alertas + ')' if publicar_alertas else 'DESATIVADO'}")
-    print("=" * 75)
+    print("=" * 78)
 
     # 1. Assinatura do tópico Kafka em tempo real
     df_kafka_raw = (
@@ -338,7 +519,7 @@ def iniciar_streaming(
     # 4. Reconhecimento de padrões (KMeans) e detecção de anomalias (RandomForest) com pyspark.ml
     df_predicoes = aplicar_inferencia_ml_streaming(df_preprocessado, modelo_ml, parametros)
 
-    # 5. Execução contínua em micro-batches
+    # 5. Execução contínua em micro-batches (Consola + Parquet + Kafka opcional)
     query = (
         df_predicoes.writeStream.outputMode("append")
         .trigger(processingTime=intervalo_trigger)
@@ -348,6 +529,8 @@ def iniciar_streaming(
                 df,
                 b_id,
                 publicar_alertas=publicar_alertas,
+                salvar_parquet=salvar_parquet,
+                diretorio_parquet=diretorio_parquet,
                 bootstrap_servers=bootstrap_servers,
                 topico_alertas=topico_alertas,
             )
@@ -367,7 +550,7 @@ def iniciar_streaming(
 def parse_args():
     """Configura os argumentos de linha de comando para facilitar experimentos e benchmarks."""
     parser = argparse.ArgumentParser(
-        description="Consumidor PySpark Structured Streaming + Pipeline ML (Pessoa 3)"
+        description="Consumidor PySpark Structured Streaming + Pipeline ML + Persistência Parquet (Pessoa 3)"
     )
     parser.add_argument(
         "--bootstrap-servers",
@@ -396,6 +579,16 @@ def parse_args():
         help="Intervalo de micro-batch do Structured Streaming (ex: '2 seconds')",
     )
     parser.add_argument(
+        "--dir-parquet",
+        default=DIR_PARQUET_PADRAO,
+        help="Diretório de saída dos arquivos Parquet (padrão: resultados/parquet)",
+    )
+    parser.add_argument(
+        "--sem-parquet",
+        action="store_true",
+        help="Desativa a gravação em Parquet (mantém apenas consola/Kafka)",
+    )
+    parser.add_argument(
         "--publicar-alertas",
         action="store_true",
         help="Se ativado, publica anomalias detectadas no tópico alertas-operacionais",
@@ -412,4 +605,6 @@ if __name__ == "__main__":
         starting_offsets=args.starting_offsets,
         intervalo_trigger=args.trigger,
         publicar_alertas=args.publicar_alertas,
+        salvar_parquet=not args.sem_parquet,
+        diretorio_parquet=args.dir_parquet,
     )

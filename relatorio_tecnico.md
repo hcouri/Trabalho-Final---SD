@@ -31,14 +31,17 @@ O Kafka roda no Docker, configurado com Docker Compose. Usamos dois tópicos:
 
 Também definimos o formato das mensagens e fizemos um consumidor de teste para validar se as mensagens chegavam corretas e medir a latência do Kafka.
 
-### 2.3 Processamento no Spark e Machine Learning
+### 2.3 Processamento no Spark, Machine Learning e Persistência
 
-O consumidor em Spark lê o tópico `telemetria-pocos`. Para cada mensagem, ele:
+O consumidor em Spark (`src/streaming/consumidor_spark_ml.py`) lê o tópico `telemetria-pocos`. Para cada mensagem, ele:
 
 1. Trata os sensores sem valor, preenchendo com a mediana calculada no Trabalho 2;
 2. Normaliza os valores com Z-Score, usando a média e o desvio-padrão do Trabalho 2;
-3. Calcula atributos extras, como o maior Z-Score do evento e quantos sensores estão acima de 2 e 3 desvios-padrão;
-4. Passa tudo por um modelo de ML (KMeans + Random Forest) que classifica o evento em `NORMAL`, `ANOMALIA_IMINENTE` ou `ANOMALIA_PONTUAL`.
+3. Calcula atributos extras, como o maior Z-Score do evento, diferenciais de pressão/temperatura e quantos sensores estão acima de 2 e 3 desvios-padrão;
+4. Passa tudo por um modelo de ML (KMeans + Random Forest) que classifica o evento em `NORMAL`, `ANOMALIA_IMINENTE` ou `ANOMALIA_PONTUAL`;
+5. Calcula agregações e médias operacionais por poço (`calcular_agregacoes_por_poco`) e persiste as saídas em formato colunar **Parquet** (`resultados/parquet/eventos_processados`, `agregacoes_pocos` e `alertas_anomalias`), além da exibição na consola e envio ao tópico `alertas-operacionais`.
+
+A integridade das saídas gravadas e o consolidado dos 4 experimentos (**198.000 eventos processados** em **219 micro-batches**, **3.971 anomalias detectadas**, **2.092 alertas entregues** em **20 poços** com **0 mensagens perdidas** e **47,3% de redução média de ruído**) são auditados pelo script `src/streaming/validar_saidas_p3.py` e exportados em `resultados/resumo_metricas_p3.json`.
 
 ## 3. Motor de regras de alertas
 

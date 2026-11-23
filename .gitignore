@@ -5,4 +5,6 @@ __pycache__/
 data/raw/*
 checkpoints/
 models/pipeline_ml_3w/
+resultados/parquet/
+resultados/parquet_teste_p3/
 !.gitignore
