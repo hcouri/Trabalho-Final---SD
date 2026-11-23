@@ -102,7 +102,9 @@ O `setup_kafka.py` deve rodar **antes** do produtor. Caso contrário, o Kafka cr
 python -m src.ml.treinar_modelo
 ```
 
-O modelo é salvo em `models/pipeline_ml_3w/` e as métricas em `models/metricas_modelo.json`.
+Com o 3W em `data/raw/`, o treino usa 5 arquivos de cada classe: 4 para treino e 1 para teste, separados por arquivo inteiro. O primeiro arquivo de cada classe fica de fora, porque é o que o produtor transmite no fluxo. Se `data/raw/` estiver vazia, o treino usa um conjunto sintético gerado a partir dos parâmetros estatísticos.
+
+O modelo é salvo em `models/pipeline_ml_3w/` e as métricas em `models/metricas_modelo.json`. A pasta do modelo não é versionada, então cada máquina que for rodar o fluxo precisa executar este passo.
 
 ### 5. Iniciar o consumidor Spark (Terminal 1)
 
@@ -116,7 +118,7 @@ Opções úteis:
 |---|---|
 | `--starting-offsets earliest` | Lê o tópico desde o início (o padrão é `latest`). |
 | `--trigger "2 seconds"` | Intervalo dos micro-batches. |
-| `--sem-parquet` | Exibe apenas na console, sem gravar Parquet. |
+| `--sem-parquet` | Exibe apenas no console, sem gravar Parquet. |
 | `--publicar-alertas` | Publica as anomalias no tópico `alertas-operacionais`. |
 
 ### 6. Iniciar o produtor (Terminal 2)
@@ -203,16 +205,36 @@ python -m src.benchmarks.gerar_graficos
 
 ### Principais resultados
 
+**Fluxo com o Dataset 3W** (10 fluxos simultâneos, um arquivo por classe, a 1 Hz)
+
 | Métrica | Valor |
 |---|---|
-| Eventos processados (4 experimentos) | 198.000 em 219 micro-batches |
-| Mensagens perdidas | 0 |
-| Anomalias detectadas | 3.971 (2,01%) |
+| Leituras processadas | 3.860 em 93 micro-batches |
+| Mensagens perdidas | 0 (3.860 enviadas, 3.860 gravadas no Parquet) |
+| Latência média ponta a ponta | 2,16 s (P95 de 4,10 s) |
+| Fluxos classificados corretamente | 6 de 10 |
+
+**Modelo** (treinado com 4 arquivos por classe do 3W e testado com 1 arquivo por classe que o modelo não viu)
+
+| Métrica | Valor |
+|---|---|
+| Acurácia | 85,08% |
+| F1-score | 0,846 |
+| Anomalias pontuais classificadas como normais | 0 de 2.662 |
+| Leituras normais com alarme falso | 40,8% |
+
+**Teste de carga** (gerador sintético, de 50 a 1.000 mensagens/s)
+
+| Métrica | Valor |
+|---|---|
+| Eventos processados | 198.000 em 219 micro-batches, sem perdas |
 | Latência média ponta a ponta (até 500 msg/s) | ~3,3 s |
 | Memória do Spark | ~1 GB, estável em todas as taxas |
-| Acurácia / F1 do modelo | 97,55% / 0,9755 |
+| Redução de alertas pelo motor de regras | 47,3% (3.971 anomalias, 2.092 alertas) |
 
-Em 1000 msg/s, a latência sobe para ~21,5 s porque o consumidor lê no máximo 2000 mensagens por micro-batch (`maxOffsetsPerTrigger`). O Kafka absorve o excedente e não há perda. A análise completa está em [`relatorio_tecnico.md`](relatorio_tecnico.md).
+Em 1.000 msg/s, a latência sobe para ~21,5 s porque o consumidor lê no máximo 2.000 mensagens por micro-batch (`maxOffsetsPerTrigger`). O Kafka absorve o excedente e não há perda. A análise completa do teste de carga está em [`relatorio_tecnico.md`](relatorio_tecnico.md).
+
+> O 3W reúne instâncias reais de poços (`WELL-*`), simuladas (`SIMULATED_*`) e desenhadas à mão (`DRAWN_*`). Como os arquivos são escolhidos em ordem alfabética, as classes de anomalia tendem a usar instâncias simuladas ou desenhadas.
 
 ---
 
@@ -228,4 +250,3 @@ Em 1000 msg/s, a latência sobe para ~21,5 s porque o consumidor lê no máximo 
 ## Documentação complementar
 
 - [`relatorio_tecnico.md`](relatorio_tecnico.md): relatório técnico com os experimentos e as limitações.
-- [`DOCUMENTACAO_MODULO_3.md`](DOCUMENTACAO_MODULO_3.md): detalhes do pipeline Spark, ML e persistência.
