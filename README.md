@@ -8,7 +8,7 @@ O sistema simula a telemetria de poços de petróleo em tempo real a partir do *
 
 ## Arquitetura
 
-![Arquitetura do sistema](arquitetura_trabalho_final.png)
+![Arquitetura do sistema](docs/arquitetura.png)
 
 | # | Componente | Arquivo principal | Função |
 |---|---|---|---|
@@ -16,7 +16,7 @@ O sistema simula a telemetria de poços de petróleo em tempo real a partir do *
 | 2 | **Produtor Python** | `src/produtor/produtor_3w.py` | Seleciona 1 arquivo por classe (leitura estratificada) e transmite os poços em paralelo via Round-Robin, a 1 leitura por segundo por poço (1 Hz). Acrescenta `poco_id`, `timestamp_envio`, `arquivo_origem` e `evento_classe` e envia em JSON. |
 | 3 | **Apache Kafka** | `configs/docker-compose.yml`, `src/setup_kafka.py` | Broker único em Docker no modo KRaft (sem Zookeeper). Tópicos `telemetria-pocos` (4 partições) e `alertas-operacionais` (1 partição). |
 | 4 | **Spark Structured Streaming** | `src/streaming/consumidor_spark_ml.py` | Micro-batches de 2 s com checkpoint. Faz o parse do JSON, imputação e Z-Score com os parâmetros do Trabalho 2, e inferência com `KMeans` + `RandomForestClassifier`. |
-| 5 | **Saídas** | `resultados/parquet/`, `src/alertas/` | Consola, Parquet (eventos, agregações por poço e alertas) e motor de regras (R1, R2, R3 + *cooldown*) que publica no tópico `alertas-operacionais`. |
+| 5 | **Saídas** | `resultados/parquet/`, `src/alertas/` | Console, Parquet (eventos, agregações por poço e alertas) e motor de regras (R1, R2, R3 + *cooldown*) que publica no tópico `alertas-operacionais`. |
 
 ### Por que é um sistema distribuído
 
@@ -116,7 +116,7 @@ Opções úteis:
 |---|---|
 | `--starting-offsets earliest` | Lê o tópico desde o início (o padrão é `latest`). |
 | `--trigger "2 seconds"` | Intervalo dos micro-batches. |
-| `--sem-parquet` | Exibe apenas na consola, sem gravar Parquet. |
+| `--sem-parquet` | Exibe apenas na console, sem gravar Parquet. |
 | `--publicar-alertas` | Publica as anomalias no tópico `alertas-operacionais`. |
 
 ### 6. Iniciar o produtor (Terminal 2)
