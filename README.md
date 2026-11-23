@@ -8,7 +8,7 @@ O sistema simula a telemetria de poços de petróleo em tempo real a partir do *
 
 ## Arquitetura
 
-![Arquitetura do sistema](docs/arquitetura.png)
+![Arquitetura do sistema](arquitetura.png)
 
 | # | Componente | Arquivo principal | Função |
 |---|---|---|---|
