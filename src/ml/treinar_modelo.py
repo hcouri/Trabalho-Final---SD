@@ -139,7 +139,10 @@ def carregar_dados_treino(
     arquivos = []
     if path_raw.exists():
         for pasta in sorted(p for p in path_raw.iterdir() if p.is_dir()):
-            arquivos.extend(sorted(pasta.glob("*.parquet"))[:5])
+            # [0] fica reservado para o produtor; dos 5 seguintes, o ?ltimo vai para o teste
+            selecionados = sorted(pasta.glob("*.parquet"))[1:6]
+            for i, arq in enumerate(selecionados):
+                arquivos.append((arq, "teste" if i == len(selecionados) - 1 else "treino"))
 
     if not arquivos:
         print(
@@ -153,7 +156,7 @@ def carregar_dados_treino(
             "com amostragem em lote..."
         )
         frames = []
-        for arq in arquivos:
+        for arq, conjunto in arquivos:
             try:
                 pdf = pd.read_parquet(arq)
                 if len(pdf) > max_linhas_por_arquivo:
@@ -162,6 +165,7 @@ def carregar_dados_treino(
                 poco_id = arq.name.split("_")[0] if "_" in arq.name else "WELL-3W"
                 pdf["poco_id"] = poco_id
                 pdf["arquivo_origem"] = arq.name
+                pdf["conjunto"] = conjunto
                 pdf["classe_real"] = (
                     pd.to_numeric(pdf["class"], errors="coerce").fillna(0).astype(int)
                     if "class" in pdf.columns
@@ -174,7 +178,7 @@ def carregar_dados_treino(
                     else:
                         pdf[sensor] = pd.to_numeric(pdf[sensor], errors="coerce")
 
-                colunas_manter = ["poco_id", "arquivo_origem", "classe_real"] + SENSORES_CANONICOS
+                colunas_manter = ["poco_id", "arquivo_origem", "classe_real", "conjunto"] + SENSORES_CANONICOS
                 frames.append(pdf[colunas_manter])
             except Exception as exc:
                 print(f"[AVISO] Falha ao ler {arq.name}: {exc}")
@@ -258,7 +262,12 @@ def treinar_e_salvar_modelo(
     """
     df_dados = carregar_dados_treino(spark, diretorio_raw=diretorio_raw)
 
-    df_treino, df_teste = df_dados.randomSplit([0.8, 0.2], seed=42)
+    if "conjunto" in df_dados.columns:
+        # Dados reais: separa por arquivo inteiro
+        df_treino = df_dados.filter(F.col("conjunto") == "treino")
+        df_teste = df_dados.filter(F.col("conjunto") == "teste")
+    else:
+        df_treino, df_teste = df_dados.randomSplit([0.8, 0.2], seed=42)
 
     print("[ML] Ajustando Pipeline pyspark.ml (Imputer + VectorAssembler + StandardScaler + KMeans + RandomForest)...")
     pipeline = construir_pipeline_ml()

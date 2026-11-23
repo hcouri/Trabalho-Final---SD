@@ -123,17 +123,8 @@ def aplicar_inferencia_ml_streaming(
     # Classificação híbrida (combina predição do RandomForest com limites estatísticos 2σ e 3σ do Trabalho 2)
     df_pred = df_pred.withColumn(
         "status_operacional",
-        F.when(
-            (F.col("predicao_ml") == 2.0)
-            | (F.col("qtd_sensores_fora_3sigma") >= 1.0),
-            F.lit("ANOMALIA_PONTUAL"),
-        )
-        .when(
-            (F.col("predicao_ml") == 1.0)
-            | (F.col("qtd_sensores_fora_2sigma") >= 2.0)
-            | (F.col("score_anomalia_ml") >= 0.45),
-            F.lit("ANOMALIA_IMINENTE"),
-        )
+        F.when(F.col("predicao_ml") == 2.0, F.lit("ANOMALIA_PONTUAL"))
+        .when(F.col("predicao_ml") == 1.0, F.lit("ANOMALIA_IMINENTE"))
         .otherwise(F.lit("NORMAL")),
     ).withColumn(
         "severidade",
