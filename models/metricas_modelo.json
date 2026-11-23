@@ -16,47 +16,57 @@
     "diferencial_pressao_norm",
     "diferencial_temp_norm"
   ],
-  "total_treino": 2389,
-  "total_teste": 611,
-  "accuracy": 0.9755,
-  "f1_score": 0.9755,
-  "weighted_precision": 0.9755,
-  "weighted_recall": 0.9755,
+  "total_treino": 20132,
+  "total_teste": 4868,
+  "accuracy": 0.9199,
+  "f1_score": 0.918,
+  "weighted_precision": 0.9199,
+  "weighted_recall": 0.9199,
   "matriz_confusao": [
     {
       "label_real": 0,
       "predicao": 0,
-      "contagem": 310
+      "contagem": 708
     },
     {
       "label_real": 0,
       "predicao": 1,
-      "contagem": 5
+      "contagem": 47
+    },
+    {
+      "label_real": 0,
+      "predicao": 2,
+      "contagem": 161
     },
     {
       "label_real": 1,
       "predicao": 0,
-      "contagem": 5
+      "contagem": 73
     },
     {
       "label_real": 1,
       "predicao": 1,
-      "contagem": 170
+      "contagem": 1182
     },
     {
       "label_real": 1,
       "predicao": 2,
-      "contagem": 2
+      "contagem": 77
     },
     {
       "label_real": 2,
-      "predicao": 1,
+      "predicao": 0,
       "contagem": 3
     },
     {
       "label_real": 2,
+      "predicao": 1,
+      "contagem": 29
+    },
+    {
+      "label_real": 2,
       "predicao": 2,
-      "contagem": 116
+      "contagem": 2588
     }
   ]
 }

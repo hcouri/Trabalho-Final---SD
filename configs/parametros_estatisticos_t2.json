@@ -9,73 +9,98 @@
   "sensores": {
     "P-PDG": {
       "descricao": "Pressao no Permanent Downhole Gauge (Pa)",
-      "aliases": ["P-PDG", "P_PDG"],
-      "media": 26500000.0,
-      "desvio_padrao": 4500000.0,
-      "mediana": 26200000.0,
-      "min": 10000000.0,
-      "max": 45000000.0,
+      "aliases": [
+        "P-PDG",
+        "P_PDG"
+      ],
+      "media": -942870.590621,
+      "desvio_padrao": 2508106.778848,
+      "mediana": 0.0,
+      "min": -144734800.0,
+      "max": 0.0,
       "media_escala_reduzida": 350.0,
       "desvio_escala_reduzida": 85.0
     },
     "P-TPT": {
       "descricao": "Pressao no Temperature and Pressure Transducer (Pa)",
-      "aliases": ["P-TPT", "P-TP", "P_TPT"],
-      "media": 14200000.0,
-      "desvio_padrao": 2800000.0,
-      "mediana": 14000000.0,
-      "min": 2000000.0,
-      "max": 28000000.0,
+      "aliases": [
+        "P-TPT",
+        "P-TP",
+        "P_TPT"
+      ],
+      "media": 10480720.013165,
+      "desvio_padrao": 2752611.216359,
+      "mediana": 9634985.0,
+      "min": 7161897.0,
+      "max": 16657890.0,
       "media_escala_reduzida": 135.0,
       "desvio_escala_reduzida": 25.0
     },
     "T-TPT": {
       "descricao": "Temperatura no Temperature and Pressure Transducer (C)",
-      "aliases": ["T-TPT", "T-TP", "T_TPT"],
-      "media": 76.5,
-      "desvio_padrao": 12.4,
-      "mediana": 77.0,
-      "min": 20.0,
-      "max": 125.0,
+      "aliases": [
+        "T-TPT",
+        "T-TP",
+        "T_TPT"
+      ],
+      "media": 117.323779,
+      "desvio_padrao": 0.770916,
+      "mediana": 117.05595,
+      "min": 114.9969,
+      "max": 119.6061,
       "media_escala_reduzida": 76.5,
       "desvio_escala_reduzida": 12.4
     },
     "P-MON-CKP": {
       "descricao": "Pressao a montante do Choke de Producao (Pa)",
-      "aliases": ["P-MON-CKP", "P-MON-CK", "P_MON_CKP"],
-      "media": 4200000.0,
-      "desvio_padrao": 1150000.0,
-      "mediana": 4100000.0,
-      "min": 500000.0,
-      "max": 12000000.0,
+      "aliases": [
+        "P-MON-CKP",
+        "P-MON-CK",
+        "P_MON_CKP"
+      ],
+      "media": 4456610.788394,
+      "desvio_padrao": 2180286.696783,
+      "mediana": 6066519.0,
+      "min": 972195.8,
+      "max": 6317826.0,
       "media_escala_reduzida": 28.5,
       "desvio_escala_reduzida": 12.0
     },
     "T-JUS-CKP": {
       "descricao": "Temperatura a jusante do Choke de Producao (C)",
-      "aliases": ["T-JUS-CKP", "T-JSC", "T_JUS_CKP"],
-      "media": 54.2,
-      "desvio_padrao": 9.8,
-      "mediana": 55.0,
-      "min": 15.0,
-      "max": 95.0,
+      "aliases": [
+        "T-JUS-CKP",
+        "T-JSC",
+        "T_JUS_CKP"
+      ],
+      "media": 74.327143,
+      "desvio_padrao": 6.769342,
+      "mediana": 69.590055,
+      "min": 67.56734,
+      "max": 85.4846,
       "media_escala_reduzida": 54.2,
       "desvio_escala_reduzida": 9.8
     },
     "P-JUS-CKGL": {
       "descricao": "Pressao a jusante do Choke de Gas Lift (Pa)",
-      "aliases": ["P-JUS-CKGL", "P_JUS_CKGL"],
-      "media": 11500000.0,
-      "desvio_padrao": 2100000.0,
-      "mediana": 11400000.0,
-      "min": 1000000.0,
-      "max": 22000000.0,
+      "aliases": [
+        "P-JUS-CKGL",
+        "P_JUS_CKGL"
+      ],
+      "media": 2133434.106551,
+      "desvio_padrao": 1475529.165961,
+      "mediana": 3037455.0,
+      "min": -153352.3,
+      "max": 3469234.0,
       "media_escala_reduzida": 115.0,
       "desvio_escala_reduzida": 21.0
     },
     "T-JUS-CKGL": {
       "descricao": "Temperatura a jusante do Choke de Gas Lift (C)",
-      "aliases": ["T-JUS-CKGL", "T_JUS_CKGL"],
+      "aliases": [
+        "T-JUS-CKGL",
+        "T_JUS_CKGL"
+      ],
       "media": 42.0,
       "desvio_padrao": 7.5,
       "mediana": 42.0,
@@ -86,12 +111,15 @@
     },
     "QGL": {
       "descricao": "Vazao de Gas Lift (m3/s)",
-      "aliases": ["QGL", "Q-GL"],
-      "media": 0.45,
-      "desvio_padrao": 0.22,
-      "mediana": 0.42,
+      "aliases": [
+        "QGL",
+        "Q-GL"
+      ],
+      "media": 1.5e-05,
+      "desvio_padrao": 0.001516,
+      "mediana": 0.0,
       "min": 0.0,
-      "max": 2.5,
+      "max": 0.232584,
       "media_escala_reduzida": 0.45,
       "desvio_escala_reduzida": 0.22
     }
@@ -118,4 +146,3 @@
     "109": "Transiente/Iminente: Hidrato na Linha de Servico"
   }
 }
-
