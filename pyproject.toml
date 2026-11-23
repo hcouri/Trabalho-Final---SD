@@ -1,7 +1,27 @@
 [tool.pyrefly]
-project-includes = ["src"]
-search-path = [".", "src", ".venv/Lib/site-packages", "venv/Lib/site-packages"]
+project-includes = ["src/**/*.py"]
+project-excludes = ["**/__pycache__", "**/.venv/**", "**/venv/**"]
+search-path = [".", "src"]
+ignore-missing-imports = [
+    "pyspark",
+    "pyspark.*",
+    "pandas",
+    "pandas.*",
+    "numpy",
+    "numpy.*",
+    "kafka",
+    "kafka.*",
+    "matplotlib",
+    "matplotlib.*",
+    "psutil",
+    "psutil.*",
+]
 
 [tool.pyrefly.errors]
-missing-import = false
+missing-import = "ignore"
+unused-ignore = "ignore"
 
+[tool.pyright]
+extraPaths = [".", "src"]
+reportMissingImports = "none"
+reportMissingModuleSource = "none"

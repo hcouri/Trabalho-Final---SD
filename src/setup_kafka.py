@@ -1,4 +1,4 @@
-import json
+from typing import Any, Dict
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError
 
@@ -7,7 +7,7 @@ TOPICO_TELEMETRIA = 'telemetria-pocos'
 TOPICO_ALERTAS = 'alertas-operacionais'
 
 # Esquema oficial (Contrato de Dados entre Pessoa 1, 2 e 3)
-CAMPOS_OBRIGATORIOS = {
+CAMPOS_OBRIGATORIOS: Dict[str, Any] = {
     "timestamp_evento": str,      # Data/hora original da linha no dataset 3W
     "timestamp_envio": float,     # time.time() no momento do disparo pelo Produtor
     "arquivo_origem": str,        # Ex: WELL-00002_20170211080129.parquet

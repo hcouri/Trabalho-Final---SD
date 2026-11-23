@@ -12,6 +12,7 @@ import argparse
 import json
 import random
 import time
+from typing import Any, Dict
 
 from kafka import KafkaProducer
 
@@ -26,7 +27,7 @@ def gerar_evento(parametros, poco, anomalo):
         desvio = 0
         classe = 0
 
-    evento = {"poco_id": poco, "arquivo_origem": poco + "_BENCHMARK.parquet", "class": classe}
+    evento: Dict[str, Any] = {"poco_id": poco, "arquivo_origem": poco + "_BENCHMARK.parquet", "class": classe}
     for sensor, info in parametros["sensores"].items():
         # ruido normal em todos os sensores + desvio quando o evento e anomalo
         z = random.gauss(0, 0.5) + desvio

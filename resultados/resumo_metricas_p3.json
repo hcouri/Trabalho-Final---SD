@@ -1,0 +1,155 @@
+{
+  "validacao_parquet": {
+    "eventos_processados": {
+      "caminho": "resultados/parquet/eventos_processados",
+      "particionamento": "poco_id",
+      "descricao": "Eventos normalizados (Z-Score) + predições KMeans e RandomForest"
+    },
+    "agregacoes_pocos": {
+      "caminho": "resultados/parquet/agregacoes_pocos",
+      "descricao": "Agregações e médias por poço por micro-batch (sensores, Z-Score, taxa de anomalia e latência)"
+    },
+    "alertas_anomalias": {
+      "caminho": "resultados/parquet/alertas_anomalias",
+      "descricao": "Registros filtrados de anomalias pontuais e iminentes prontos para auditoria"
+    }
+  },
+  "consolidado_geral": {
+    "total_micro_batches": 219,
+    "total_eventos_processados": 198000,
+    "total_anomalias_detectadas": 3971,
+    "taxa_anomalia_media_pct": 2.01,
+    "total_alertas_emitidos_spark": 2092,
+    "total_alertas_recebidos_kafka": 2092,
+    "perda_de_mensagens": 0,
+    "reducao_ruido_media_pct": 47.3,
+    "total_pocos_monitorados_com_anomalia": 20
+  },
+  "modelo_ml": {
+    "algoritmo": "RandomForestClassifier (numTrees=60, maxDepth=8) + KMeans (k=4)",
+    "accuracy_pct": 97.55,
+    "f1_score": 0.9755,
+    "weighted_precision": 0.9755,
+    "weighted_recall": 0.9755,
+    "total_treino": 2389,
+    "total_teste": 611,
+    "falsos_negativos_normal_vs_pontual": 0
+  },
+  "experimentos_por_taxa": {
+    "50_msg_s": {
+      "taxa_msg_s": 50,
+      "micro_batches": 54,
+      "eventos_processados": 6000,
+      "anomalias_detectadas": 135,
+      "taxa_anomalia_pct": 2.25,
+      "alertas_emitidos_spark": 130,
+      "alertas_recebidos_kafka": 130,
+      "integridade_entrega_100pct": true,
+      "reducao_ruido_pct": 3.7,
+      "duracao_media_batch_ms": 1041.7,
+      "pocos_com_alerta": 20,
+      "latencia_media_ms": 3311.6,
+      "latencia_p50_ms": 3352.8,
+      "latencia_p95_ms": 5434.4,
+      "latencia_max_ms": 7426.3,
+      "latencia_kafka_media_ms": 14.89,
+      "memoria_spark_media_mb": 1048.5,
+      "memoria_kafka_media_mb": 399.5,
+      "regras_acionadas": {
+        "R1_CRITICA_IMEDIATA": 130
+      },
+      "top_3_pocos_alertas": {
+        "WELL-B20": 11,
+        "WELL-B12": 10,
+        "WELL-B07": 10
+      }
+    },
+    "100_msg_s": {
+      "taxa_msg_s": 100,
+      "micro_batches": 52,
+      "eventos_processados": 12000,
+      "anomalias_detectadas": 249,
+      "taxa_anomalia_pct": 2.08,
+      "alertas_emitidos_spark": 219,
+      "alertas_recebidos_kafka": 219,
+      "integridade_entrega_100pct": true,
+      "reducao_ruido_pct": 12.0,
+      "duracao_media_batch_ms": 1069.0,
+      "pocos_com_alerta": 20,
+      "latencia_media_ms": 3309.3,
+      "latencia_p50_ms": 3353.4,
+      "latencia_p95_ms": 5426.0,
+      "latencia_max_ms": 7936.8,
+      "latencia_kafka_media_ms": 6.78,
+      "memoria_spark_media_mb": 924.0,
+      "memoria_kafka_media_mb": 415.8,
+      "regras_acionadas": {
+        "R1_CRITICA_IMEDIATA": 218,
+        "R2_PERSISTENCIA": 1
+      },
+      "top_3_pocos_alertas": {
+        "WELL-B04": 15,
+        "WELL-B13": 15,
+        "WELL-B10": 14
+      }
+    },
+    "500_msg_s": {
+      "taxa_msg_s": 500,
+      "micro_batches": 52,
+      "eventos_processados": 60000,
+      "anomalias_detectadas": 1239,
+      "taxa_anomalia_pct": 2.06,
+      "alertas_emitidos_spark": 714,
+      "alertas_recebidos_kafka": 714,
+      "integridade_entrega_100pct": true,
+      "reducao_ruido_pct": 42.4,
+      "duracao_media_batch_ms": 1068.6,
+      "pocos_com_alerta": 20,
+      "latencia_media_ms": 3558.2,
+      "latencia_p50_ms": 3381.8,
+      "latencia_p95_ms": 6321.9,
+      "latencia_max_ms": 7590.6,
+      "latencia_kafka_media_ms": 8.02,
+      "memoria_spark_media_mb": 933.5,
+      "memoria_kafka_media_mb": 424.6,
+      "regras_acionadas": {
+        "R1_CRITICA_IMEDIATA": 703,
+        "R2_PERSISTENCIA": 11
+      },
+      "top_3_pocos_alertas": {
+        "WELL-B14": 43,
+        "WELL-B06": 39,
+        "WELL-B02": 39
+      }
+    },
+    "1000_msg_s": {
+      "taxa_msg_s": 1000,
+      "micro_batches": 61,
+      "eventos_processados": 120000,
+      "anomalias_detectadas": 2348,
+      "taxa_anomalia_pct": 1.96,
+      "alertas_emitidos_spark": 1029,
+      "alertas_recebidos_kafka": 1029,
+      "integridade_entrega_100pct": true,
+      "reducao_ruido_pct": 56.2,
+      "duracao_media_batch_ms": 994.9,
+      "pocos_com_alerta": 20,
+      "latencia_media_ms": 21519.3,
+      "latencia_p50_ms": 23156.4,
+      "latencia_p95_ms": 26621.6,
+      "latencia_max_ms": 27096.7,
+      "latencia_kafka_media_ms": 6.12,
+      "memoria_spark_media_mb": 941.2,
+      "memoria_kafka_media_mb": 514.8,
+      "regras_acionadas": {
+        "R1_CRITICA_IMEDIATA": 1019,
+        "R2_PERSISTENCIA": 10
+      },
+      "top_3_pocos_alertas": {
+        "WELL-B09": 55,
+        "WELL-B07": 55,
+        "WELL-B15": 54
+      }
+    }
+  }
+}

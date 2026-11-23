@@ -22,18 +22,20 @@ Arquitetura do `pyspark.ml.Pipeline`:
 """
 
 import json
+import os
 import random
+import sys
 from pathlib import Path
-from typing import Tuple, Dict, Any
-import pandas as pd  # pyrefly: ignore[missing-import]
+from typing import Any, Dict, List, Tuple
+import pandas as pd
 
-from pyspark.sql import SparkSession, DataFrame  # pyrefly: ignore[missing-import]
-from pyspark.sql import functions as F  # pyrefly: ignore[missing-import]
-from pyspark.ml import Pipeline, PipelineModel  # pyrefly: ignore[missing-import]
-from pyspark.ml.feature import Imputer, VectorAssembler, StandardScaler  # pyrefly: ignore[missing-import]
-from pyspark.ml.clustering import KMeans  # pyrefly: ignore[missing-import]
-from pyspark.ml.classification import RandomForestClassifier  # pyrefly: ignore[missing-import]
-from pyspark.ml.evaluation import MulticlassClassificationEvaluator  # pyrefly: ignore[missing-import]
+from pyspark.sql import Column, DataFrame, SparkSession
+from pyspark.sql import functions as F
+from pyspark.ml import Pipeline, PipelineModel
+from pyspark.ml.feature import Imputer, VectorAssembler, StandardScaler
+from pyspark.ml.clustering import KMeans
+from pyspark.ml.classification import RandomForestClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 
 from src.streaming.preprocessamento import (
     SENSORES_CANONICOS,
@@ -47,7 +49,7 @@ CAMINHO_MODELO_PADRAO = Path("models/pipeline_ml_3w")
 CAMINHO_METRICAS_PADRAO = Path("models/metricas_modelo.json")
 
 
-def mapear_classe_para_label_estado(col_classe: F.Column, col_z_max: F.Column) -> F.Column:
+def mapear_classe_para_label_estado(col_classe: Column, col_z_max: Column) -> Column:
     """
     Converte o código `class` do Dataset 3W no rótulo alvo (`label_estado`) do classificador:
       - 0.0: Operação Normal (class == 0 e z_score_max < 2.2)
@@ -73,7 +75,7 @@ def _gerar_dataset_calibracao_3w(
     """
     rng = random.Random(42)
     cfg_sensores = parametros["sensores"]
-    registros = []
+    registros: List[Dict[str, Any]] = []
 
     classes_iminentes = [101, 102, 103, 104, 105, 106, 107, 108]
     classes_pontuais = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -98,10 +100,10 @@ def _gerar_dataset_calibracao_3w(
             fator_desvio = sinal * rng.uniform(3.05, 5.50)
             escala_ruido = 0.75
 
-        linha = {
+        linha: Dict[str, Any] = {
             "poco_id": f"WELL-0000{(i % 5) + 1}",
             "arquivo_origem": f"WELL-0000{(i % 5) + 1}_CALIBRACAO.parquet",
-            "classe_real": int(classe),
+            "classe_real": classe,
         }
 
         # Seleciona de 2 a 4 sensores principais sensibilizados pelo evento anômalo
@@ -121,7 +123,7 @@ def _gerar_dataset_calibracao_3w(
             else:
                 z_simulado = fator_desvio + rng.gauss(0.0, 0.35)
 
-            linha[sensor] = float(media + z_simulado * desvio)
+            linha[sensor] = media + z_simulado * desvio
 
         registros.append(linha)
 
@@ -315,7 +317,7 @@ def treinar_e_salvar_modelo(
         for r in matriz_rows
     ]
 
-    metricas = {
+    metricas: Dict[str, Any] = {
         "algoritmo": "RandomForestClassifier (numTrees=60, maxDepth=8) + KMeans (k=4)",
         "features_utilizadas": COLUNAS_FEATURES_ML,
         "total_treino": df_treino.count(),
@@ -330,10 +332,10 @@ def treinar_e_salvar_modelo(
     print("=" * 60)
     print(" MÉTRICAS DE VALIDAÇÃO DO MODELO PYSPARK.ML (PESSOA 3)")
     print("=" * 60)
-    print(f" Acurácia (Accuracy)          : {metricas['accuracy'] * 100:.2f}%")
-    print(f" F1-Score Ponderado           : {metricas['f1_score'] * 100:.2f}%")
-    print(f" Precisão Ponderada           : {metricas['weighted_precision'] * 100:.2f}%")
-    print(f" Recall Ponderado             : {metricas['weighted_recall'] * 100:.2f}%")
+    print(f" Acurácia (Accuracy)          : {acuracia * 100:.2f}%")
+    print(f" F1-Score Ponderado           : {f1_score * 100:.2f}%")
+    print(f" Precisão Ponderada           : {precisao * 100:.2f}%")
+    print(f" Recall Ponderado             : {recall * 100:.2f}%")
     print("=" * 60)
 
     # Salva o PipelineModel para carregamento rápido no Structured Streaming
@@ -371,9 +373,15 @@ def obter_ou_treinar_modelo(
 
 
 if __name__ == "__main__":
+    os.environ.setdefault("SPARK_LOCAL_IP", "127.0.0.1")
+    os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
+    os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
+
     spark_session = (
         SparkSession.builder.appName("Treinamento-ML-3W-Pessoa3")
         .master("local[*]")
+        .config("spark.driver.host", os.getenv("SPARK_LOCAL_IP", "127.0.0.1"))
+        .config("spark.driver.bindAddress", os.getenv("SPARK_LOCAL_IP", "127.0.0.1"))
         .config("spark.ui.showConsoleProgress", "false")
         .getOrCreate()
     )

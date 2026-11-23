@@ -20,9 +20,9 @@ Principais responsabilidades:
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from pyspark.sql import DataFrame  # pyrefly: ignore[missing-import]
-from pyspark.sql import functions as F  # pyrefly: ignore[missing-import]
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, MapType  # pyrefly: ignore[missing-import]
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, MapType
 
 # Caminho padrão para os parâmetros estatísticos validados no Trabalho 2
 CAMINHO_PARAMETROS_T2 = Path("configs/parametros_estatisticos_t2.json")
@@ -83,6 +83,7 @@ def obter_schema_telemetria() -> StructType:
             StructField("timestamp", StringType(), True),
             StructField("arquivo_origem", StringType(), True),
             StructField("poco_id", StringType(), True),
+            StructField("evento_classe", StringType(), True),
             StructField("class", DoubleType(), True),
             # Sensores no nível raiz (formato Pessoa 1 - Parquet 3W original)
             StructField("P-PDG", DoubleType(), True),
@@ -104,7 +105,7 @@ def obter_schema_telemetria() -> StructType:
     )
 
 
-def _limpar_nan(coluna: F.Column) -> F.Column:
+def _limpar_nan(coluna: Column) -> Column:
     """Converte valores NaN de ponto flutuante (IEEE 754) em NULL do Spark SQL."""
     return F.when(F.isnan(coluna), F.lit(None).cast(DoubleType())).otherwise(coluna)
 
@@ -176,17 +177,25 @@ def parsear_stream_kafka(df_kafka: DataFrame) -> DataFrame:
         ),
     ).withColumn(
         "timestamp_recebimento_spark",
-        F.unix_timestamp(F.current_timestamp()).cast(DoubleType())
-        + (F.unix_millis(F.current_timestamp()) % 1000) / 1000.0,
+        F.current_timestamp().cast(DoubleType()),
     )
 
     # Converte o código de classe real do 3W (0 = Normal, 1..9 = Falha, 101..109 = Transiente/Iminente)
+    # Suporta também o campo 'evento_classe' adicionado pelo produtor multi-poço 1Hz (Pessoa 1)
     df_parsed = df_parsed.withColumn(
+        "evento_classe",
+        F.coalesce(F.col("evento_classe"), F.lit("desconhecida")),
+    ).withColumn(
         "classe_real",
         F.when(
             F.col("class").isNotNull() & ~F.isnan(F.col("class")),
             F.col("class").cast("int"),
-        ).otherwise(F.lit(0)),
+        )
+        .when(
+            F.col("evento_classe").rlike("^[0-9]+$"),
+            F.col("evento_classe").cast("int"),
+        )
+        .otherwise(F.lit(0)),
     )
 
     colunas_selecionadas = [
@@ -198,6 +207,7 @@ def parsear_stream_kafka(df_kafka: DataFrame) -> DataFrame:
         "timestamp_recebimento_spark",
         "arquivo_origem",
         "poco_id",
+        "evento_classe",
         "classe_real",
     ] + SENSORES_CANONICOS
 
